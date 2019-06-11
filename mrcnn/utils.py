@@ -50,10 +50,10 @@ def extract_bboxes(mask):
             x2 += 1
             y2 += 1
             if is_keypoint:
-                x1 -= 5
-                y1 -= 5
-                x2 += 4
-                y2 += 4
+                x1 -= 28
+                y1 -= 28
+                x2 += 27
+                y2 += 27
 
         else:
             # No mask for this instance. Might happen due to
