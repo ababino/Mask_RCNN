@@ -2120,11 +2120,17 @@ class MaskRCNN():
                                      train_bn=config.TRAIN_BN,
                                      fc_layers_size=config.FPN_CLASSIF_FC_LAYERS_SIZE)
 
-            mrcnn_mask = build_fpn_mask_graph(rois, mrcnn_feature_maps,
-                                              input_image_meta,
-                                              config.MASK_POOL_SIZE,
-                                              config.NUM_CLASSES,
-                                              train_bn=config.TRAIN_BN)
+            # mrcnn_mask = build_fpn_mask_graph(rois, mrcnn_feature_maps,
+            #                                   input_image_meta,
+            #                                   config.MASK_POOL_SIZE,
+            #                                   config.NUM_CLASSES,
+            #                                   train_bn=config.TRAIN_BN)
+
+            mrcnn_keypoint = build_fpn_keypoint_mask_graph(rois, mrcnn_feature_maps,
+                                                           input_image_meta,
+                                                           config.MASK_POOL_SIZE,
+                                                           config.NUM_CLASSES,
+                                                           train_bn=config.TRAIN_BN)
 
             # TODO: clean up (use tf.identify if necessary)
             output_rois = KL.Lambda(lambda x: x * 1, name="output_rois")(rois)
@@ -2138,8 +2144,10 @@ class MaskRCNN():
                 [target_class_ids, mrcnn_class_logits, active_class_ids])
             bbox_loss = KL.Lambda(lambda x: mrcnn_bbox_loss_graph(*x), name="mrcnn_bbox_loss")(
                 [target_bbox, target_class_ids, mrcnn_bbox])
-            mask_loss = KL.Lambda(lambda x: mrcnn_mask_loss_graph(*x), name="mrcnn_mask_loss")(
-                [target_mask, target_class_ids, mrcnn_mask])
+            # mask_loss = KL.Lambda(lambda x: mrcnn_mask_loss_graph(*x), name="mrcnn_mask_loss")(
+            #     [target_mask, target_class_ids, mrcnn_mask])
+            keypoint_loss = KL.Lambda(lambda x: mrcnn_keypoint_loss_graph(*x), name="mrcnn_keypoint_loss")(
+                [target_mask, target_class_ids, mrcnn_keypoint])
 
             # Model
             inputs = [input_image, input_image_meta,
@@ -2147,9 +2155,9 @@ class MaskRCNN():
             if not config.USE_RPN_ROIS:
                 inputs.append(input_rois)
             outputs = [rpn_class_logits, rpn_class, rpn_bbox,
-                       mrcnn_class_logits, mrcnn_class, mrcnn_bbox, mrcnn_mask,
+                       mrcnn_class_logits, mrcnn_class, mrcnn_bbox, mrcnn_keypoint, #mrcnn_mask,
                        rpn_rois, output_rois,
-                       rpn_class_loss, rpn_bbox_loss, class_loss, bbox_loss, mask_loss]
+                       rpn_class_loss, rpn_bbox_loss, class_loss, bbox_loss, keypoint_loss]#mask_loss]
             model = KM.Model(inputs, outputs, name='mask_rcnn')
         else:
             # Network Heads
@@ -2168,15 +2176,22 @@ class MaskRCNN():
 
             # Create masks for detections
             detection_boxes = KL.Lambda(lambda x: x[..., :4])(detections)
-            mrcnn_mask = build_fpn_mask_graph(detection_boxes, mrcnn_feature_maps,
-                                              input_image_meta,
-                                              config.MASK_POOL_SIZE,
-                                              config.NUM_CLASSES,
-                                              train_bn=config.TRAIN_BN)
+            # mrcnn_mask = build_fpn_mask_graph(detection_boxes, mrcnn_feature_maps,
+            #                                   input_image_meta,
+            #                                   config.MASK_POOL_SIZE,
+            #                                   config.NUM_CLASSES,
+            #                                   train_bn=config.TRAIN_BN)
+
+            mrcnn_keypoint = build_fpn_keypoint_mask_graph(detection_boxes, mrcnn_feature_maps,
+                                                           input_image_meta,
+                                                           config.MASK_POOL_SIZE,
+                                                           config.NUM_CLASSES,
+                                                           train_bn=config.TRAIN_BN)
 
             model = KM.Model([input_image, input_image_meta, input_anchors],
                              [detections, mrcnn_class, mrcnn_bbox,
-                                 mrcnn_mask, rpn_rois, rpn_class, rpn_bbox],
+                                 mrcnn_keypoint, rpn_rois, rpn_class, rpn_bbox],
+                                 # mrcnn_mask, rpn_rois, rpn_class, rpn_bbox],
                              name='mask_rcnn')
 
         # Add multi-GPU support.
@@ -2287,7 +2302,7 @@ class MaskRCNN():
         self.keras_model._per_input_losses = {}
         loss_names = [
             "rpn_class_loss",  "rpn_bbox_loss",
-            "mrcnn_class_loss", "mrcnn_bbox_loss", "mrcnn_mask_loss"]
+            "mrcnn_class_loss", "mrcnn_bbox_loss", "mrcnn_keypoint_loss"]#, "mrcnn_mask_loss"]
         for name in loss_names:
             layer = self.keras_model.get_layer(name)
             if layer.output in self.keras_model.losses:
