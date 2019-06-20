@@ -20,6 +20,7 @@ import skimage.transform
 import urllib.request
 import shutil
 import warnings
+import logging
 from distutils.version import LooseVersion
 
 # URL from which to download the latest COCO trained weights
