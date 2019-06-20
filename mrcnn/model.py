@@ -1045,12 +1045,12 @@ def build_fpn_keypoint_mask_graph(rois, feature_maps, image_meta,
     num_keypoints: number of classes, which determines the depth of the results
     train_bn: Boolean. Train or freeze Batch Norm layers
 
-    Returns: Masks [batch, num_rois, MASK_POOL_SIZE, MASK_POOL_SIZE, NUM_CLASSES]
+    Returns: Masks [batch, num_rois, MASK_POOL_SIZE, MASK_POOL_SIZE, MAX_NUM_KEYPOINTS * NUM_CLASSES_WITH_KP]
     """
     # ROI Pooling
     # Shape: [batch, num_rois, MASK_POOL_SIZE, MASK_POOL_SIZE, channels]
     x = PyramidROIAlign([pool_size, pool_size],
-                        name="roi_align_mask")([rois, image_meta] + feature_maps)
+                        name="roi_align_keypoint_mask")([rois, image_meta] + feature_maps)
 
     # Conv layers
     x = KL.TimeDistributed(KL.Conv2D(512, (3, 3), padding="same"),
