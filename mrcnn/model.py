@@ -1299,6 +1299,15 @@ def mrcnn_keypoint_loss_graph(target_kp_mask, target_class_ids, pred_kp_masks):
     y_true = tf.gather(target_kp_mask, positive_ix)
     y_pred = tf.gather_nd(pred_kp_masks, indices)
 
+    y_true_shape = tf.shape(y_true)
+    y_pred_shape = tf.shape(y_pred)
+
+    y_true = tf.transpose(y_true, [0, 3, 1, 2])
+    y_true = K.reshape(y_true, (-1,))
+
+    y_pred = tf.transpose(y_pred, [0, 3, 1, 2])
+    y_pred = K.reshape(y_pred, (-1,))
+
     loss = K.switch(tf.size(y_true) > 0,
                     tf.nn.softmax_cross_entropy_with_logits_v2(labels=y_true, logits=y_pred),
                     tf.constant(0.0))
