@@ -15,6 +15,7 @@ import colorsys
 
 import numpy as np
 from skimage.measure import find_contours
+from scipy.ndimage.filters import gaussian_filter
 import matplotlib.pyplot as plt
 from matplotlib import patches,  lines
 from matplotlib.patches import Polygon
@@ -300,6 +301,38 @@ def display_top_masks(image, mask, class_ids, class_names, limit=4):
         to_display.append(m)
         titles.append(class_names[class_id] if class_id != -1 else "-")
     display_images(to_display, titles=titles, cols=limit + 1, cmap="Blues_r")
+
+
+def display_top_keypoint_masks(image, mask, class_ids, class_names, limit=4):
+    """Display the given image and the top few class masks."""
+    to_display = []
+    titles = []
+    to_display.append(image)
+    titles.append("H x W={}x{}".format(image.shape[0], image.shape[1]))
+    # Pick top prominent instances in this image
+    mask = mask.sum(axis=2)
+    top_instances = sorted(range(mask.shape[2]), key=lambda x: -mask[:,:, x].sum())
+    for i in range(limit):
+        instance = top_instances[i] if i < len(top_instances) else -1
+        if instance != -1:
+            m = mask[:, :, instance]
+            # Make points bigger for better visualization
+            m = gaussian_filter(m.astype(np.float32), sigma=2) > 0
+        else:
+            m = np.zeros([0, 0])
+        to_display.append(m)
+        titles.append(class_names[class_ids[instance]] if instance != -1 else "-")
+    display_images(to_display, titles=titles, cols=limit + 1, cmap="Blues_r")
+
+
+def display_skeletons(image, skeletons):
+    """Display the given image and the top few class masks."""
+    colors = random_colors(len(skeletons))
+    plt.figure(figsize=(14, 14))
+    plt.imshow(image.astype(np.uint8))
+    for i, skeleton in enumerate(skeletons):
+        for bone in skeleton:
+            plt.plot(*bone,  linewidth=3, c=colors[i])
 
 
 def plot_precision_recall(AP, precisions, recalls):
