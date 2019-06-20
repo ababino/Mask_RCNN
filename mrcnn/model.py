@@ -1251,40 +1251,66 @@ def mrcnn_bbox_loss_graph(target_bbox, target_class_ids, pred_bbox):
     return loss
 
 
-def mrcnn_keypoint_loss_graph(target_masks, target_class_ids, pred_masks):
+def mrcnn_keypoint_loss_graph(target_kp_mask, target_class_ids, pred_kp_masks):
     """Mask binary cross-entropy loss for the masks head.
 
-    target_masks: [batch, num_rois, height, width].
+    target_kp_mask: [batch, num_rois, height, width, MAX_NUM_KEYPOINTS].
         A float32 tensor of values 0 or 1. Uses zero padding to fill array.
     target_class_ids: [batch, num_rois]. Integer class IDs. Zero padded.
-    pred_masks: [batch, proposals, height, width, num_classes] float32 tensor
-                with values from 0 to 1.
+    pred_kp_masks: [batch, proposals, height, width, MAX_NUM_KEYPOINTS * NUM_CLASSES_WITH_KP]
+                float32 tensor with values from 0 to 1.
     """
     # Reshape for simplicity. Merge first two dimensions into one.
     target_class_ids = K.reshape(target_class_ids, (-1,))
-    mask_shape = tf.shape(target_masks)
-    target_masks = K.reshape(target_masks, (-1, mask_shape[2], mask_shape[3]))
-    pred_shape = tf.shape(pred_masks)
-    pred_masks = K.reshape(pred_masks,
+    mask_kp_shape = tf.shape(target_kp_mask)
+    pred_shape = tf.shape(pred_kp_masks)
+    # target_kp_mask: [batch * num_rois, height, width, MAX_NUM_KEYPOINTS]
+    target_kp_mask = K.reshape(target_kp_mask,
+                            (-1, mask_kp_shape[2], mask_kp_shape[3], mask_kp_shape[4]))
+    mask_kp_shape = tf.shape(target_kp_mask)
+    print('0. mask_kp shape: ', mask_kp_shape)
+    # pred_kp_mask: [batch*proposals, height, width, MAX_NUM_KEYPOINTS * NUM_CLASSES_WITH_KP]
+    pred_kp_masks = K.reshape(pred_kp_masks,
                            (-1, pred_shape[2], pred_shape[3], pred_shape[4]))
-    # Permute predicted masks to [N, num_classes, height, width]
-    pred_masks = tf.transpose(pred_masks, [0, 3, 1, 2])
+    pred_shape = tf.shape(pred_kp_masks)
+    print('1. pred_kp_mask shape: ', pred_shape)
+    # pred_kp_mask: [batch*proposals, height, width, MAX_NUM_KEYPOINTS, NUM_CLASSES_WITH_KP]
+    num_classes_with_kp = tf.divide(pred_shape[3], mask_kp_shape[3])
+    num_classes_with_kp = tf.cast(num_classes_with_kp, tf.int32)
+    print('2. num_classes_with_kp ', num_classes_with_kp)
+    pred_kp_masks = K.reshape(pred_kp_masks,
+                           (pred_shape[0], pred_shape[1], pred_shape[2], mask_kp_shape[3], num_classes_with_kp))
+    pred_shape = tf.shape(pred_kp_masks)
+    print('3. pred_kp_mask shape: ', pred_shape)
+    pred_shape = tf.shape(target_kp_mask)
+    print('4. mask_kp shape: ', mask_kp_shape)
+
+    # Permute predicted masks to [batch*proposals, num_classes_with_kp, height, width, max_num_keypoints]
+    pred_kp_masks = tf.transpose(pred_kp_masks, [0, 4, 1, 2, 3])
+    # # Permute predicted masks to [batch*proposals, num_classes_with_kp*max_num_keypoints, height, width]
+    # pred_kp_masks = tf.transpose(pred_kp_masks, [0, 3, 1, 2])
 
     # Only positive ROIs contribute to the loss. And only
     # the class specific mask of each ROI.
     positive_ix = tf.where(target_class_ids > 0)[:, 0]
     positive_class_ids = tf.cast(
         tf.gather(target_class_ids, positive_ix), tf.int64)
+    # TODO: make a class_id to class_pk_id mapping. This line only works if
+    # there is only one keypoint class and it is ID=1.
+    positive_class_ids = tf.subtract(positive_class_ids, tf.constant(1, dtype=tf.int64))
     indices = tf.stack([positive_ix, positive_class_ids], axis=1)
 
     # Gather the masks (predicted and true) that contribute to loss
-    y_true = tf.gather(target_masks, positive_ix)
-    y_pred = tf.gather_nd(pred_masks, indices)
+    y_true = tf.gather(target_kp_mask, positive_ix)
+    y_pred = tf.gather_nd(pred_kp_masks, indices)
 
     # Compute binary cross entropy. If no positive ROIs, then return 0.
     # shape: [batch, roi, num_classes]
+    # loss = K.switch(tf.size(y_true) > 0,
+    #                 K.categorical_crossentropy(target=y_true, output=y_pred, from_logits=True),
+    #                 tf.constant(0.0))
     loss = K.switch(tf.size(y_true) > 0,
-                    K.categorical_crossentropy(target=y_true, output=y_pred, from_logits=True),
+                    tf.nn.softmax_cross_entropy_with_logits_v2(labels=y_true, logits=y_pred),
                     tf.constant(0.0))
     loss = K.mean(loss)
     return loss
