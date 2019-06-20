@@ -1520,6 +1520,7 @@ def build_detection_targets(rpn_rois, gt_class_ids, gt_boxes, gt_masks, gt_kp_ma
     gt_class_ids = gt_class_ids[instance_ids]
     gt_boxes = gt_boxes[instance_ids]
     gt_masks = gt_masks[:, :, instance_ids]
+    gt_kp_masks = gt_kp_masks[:, :, :, instance_ids]
 
     # Compute areas of ROIs and ground truth boxes.
     rpn_roi_area = (rpn_rois[:, 2] - rpn_rois[:, 0]) * \
@@ -1611,15 +1612,27 @@ def build_detection_targets(rpn_rois, gt_class_ids, gt_boxes, gt_masks, gt_kp_ma
     # Generate class-specific target masks
     masks = np.zeros((config.TRAIN_ROIS_PER_IMAGE, config.MASK_SHAPE[0], config.MASK_SHAPE[1], config.NUM_CLASSES),
                      dtype=np.float32)
+
+    # Generate class-specific target keypoint masks
+    keypoint_masks = np.zeros((config.TRAIN_ROIS_PER_IMAGE,
+                               config.KEYPOINT_MASK_SHAPE[0],
+                               config.KEYPOINT_MASK_SHAPE[1],
+                               config.MAX_NUM_KEYPOINTS,
+                               config.NUM_CLASSES),
+                              dtype=np.float32)
     for i in pos_ids:
         class_id = roi_gt_class_ids[i]
         assert class_id > 0, "class id must be greater than 0"
         gt_id = roi_gt_assignment[i]
         class_mask = gt_masks[:, :, gt_id]
+        class_keypoint_mask = gt_kp_masks[:, :, :, gt_id]
 
         if config.USE_MINI_MASK:
             # Create a mask placeholder, the size of the image
             placeholder = np.zeros(config.IMAGE_SHAPE[:2], dtype=bool)
+            kp_placeholder = np.zeros((config.IMAGE_SHAPE[0],
+                                       config.IMAGE_SHAPE[1],
+                                       config.MAX_NUM_KEYPOINTS), dtype=bool)
             # GT box
             gt_y1, gt_x1, gt_y2, gt_x2 = gt_boxes[gt_id]
             gt_w = gt_x2 - gt_x1
@@ -1627,16 +1640,30 @@ def build_detection_targets(rpn_rois, gt_class_ids, gt_boxes, gt_masks, gt_kp_ma
             # Resize mini mask to size of GT box
             placeholder[gt_y1:gt_y2, gt_x1:gt_x2] = \
                 np.round(utils.resize(class_mask, (gt_h, gt_w))).astype(bool)
+            yscale = gt_h / config.KEYPOINT_MASK_SHAPE[0]
+            xscale = gt_w / config.KEYPOINT_MASK_SHAPE[1]
+            class_keypoint_mask = class_keypoint_mask.reshape(class_keypoint_mask.shape + (1,))
+            class_keypoint_mask = utils.resize_keypoint_mask(class_keypoint_mask,
+                                           (yscale, xscale),
+                                           ((0, 0), (0, 0), (0, 0), (0, 0)))
+            kp_placeholder[gt_y1:gt_y2, gt_x1:gt_x2, :] = class_keypoint_mask[..., 0]
+
             # Place the mini batch in the placeholder
             class_mask = placeholder
+            class_keypoint_mask = kp_placeholder
 
         # Pick part of the mask and resize it
         y1, x1, y2, x2 = rois[i].astype(np.int32)
         m = class_mask[y1:y2, x1:x2]
         mask = utils.resize(m, config.MASK_SHAPE)
         masks[i, :, :, class_id] = mask
+        class_keypoint_mask = class_keypoint_mask.reshape(class_keypoint_mask.shape + (1,))
+        keypoint_masks[i, :, :, :, class_id] = \
+            utils.minimize_keypoint_mask([rois[i].astype(np.int32)],
+                                         class_keypoint_mask,
+                                         config.KEYPOINT_MASK_SHAPE)[...,0]
 
-    return rois, roi_gt_class_ids, bboxes, masks
+    return rois, roi_gt_class_ids, bboxes, masks, keypoint_masks
 
 
 def build_rpn_targets(image_shape, anchors, gt_class_ids, gt_boxes, config):
