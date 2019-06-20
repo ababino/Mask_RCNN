@@ -569,6 +569,37 @@ def minimize_mask(bbox, mask, mini_shape):
     return mini_mask
 
 
+def minimize_keypoint_mask(bbox, mask, mini_shape):
+    """Resize masks to a smaller version to reduce memory load.
+    Mini-masks can be resized back to image scale using expand_masks()
+
+    See inspect_data.ipynb notebook for more details.
+    """
+    try:
+        mini_shape = mini_shape + (mask.shape[-2],)
+        mini_mask = np.zeros(mini_shape + (mask.shape[-1],), dtype=bool)
+    except TypeError:
+        mini_shape = mini_shape + [mask.shape[-2],]
+        mini_mask = np.zeros(mini_shape + [mask.shape[-1],], dtype=bool)
+    for i in range(mask.shape[-1]):
+        # Pick slice and cast to bool in case load_mask() returned wrong dtype
+        m = mask[:, :, :, i].astype(bool)
+        y1, x1, y2, x2 = bbox[i][:4]
+        m = m[y1:y2, x1:x2, :]
+        y, x, kp = np.where(m)
+        y = np.round((mini_shape[0] - 1) * y / (m.shape[0] - 1)).astype(int)
+        x = np.round((mini_shape[1] - 1) * x / (m.shape[1] - 1)).astype(int)
+        if m.size == 0:
+            raise Exception("Invalid bounding box with area of zero")
+        # Resize with bilinear interpolation
+        #m = resize(m, mini_shape)
+        m = np.zeros(mini_shape)
+        m[y, x, kp] = True
+        mini_mask[:, :, :, i] = m
+        # mini_mask[:, :, :, i] = np.around(m).astype(np.bool)
+    return mini_mask
+
+
 def expand_mask(bbox, mini_mask, image_shape):
     """Resizes mini masks back to image size. Reverses the change
     of minimize_mask().
