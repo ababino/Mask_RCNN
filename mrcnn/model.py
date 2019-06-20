@@ -1268,22 +1268,19 @@ def mrcnn_keypoint_loss_graph(target_kp_mask, target_class_ids, pred_kp_masks):
     target_kp_mask = K.reshape(target_kp_mask,
                             (-1, mask_kp_shape[2], mask_kp_shape[3], mask_kp_shape[4]))
     mask_kp_shape = tf.shape(target_kp_mask)
-    print('0. mask_kp shape: ', mask_kp_shape)
+
     # pred_kp_mask: [batch*proposals, height, width, MAX_NUM_KEYPOINTS * NUM_CLASSES_WITH_KP]
     pred_kp_masks = K.reshape(pred_kp_masks,
                            (-1, pred_shape[2], pred_shape[3], pred_shape[4]))
     pred_shape = tf.shape(pred_kp_masks)
-    print('1. pred_kp_mask shape: ', pred_shape)
+
     # pred_kp_mask: [batch*proposals, height, width, MAX_NUM_KEYPOINTS, NUM_CLASSES_WITH_KP]
     num_classes_with_kp = tf.divide(pred_shape[3], mask_kp_shape[3])
     num_classes_with_kp = tf.cast(num_classes_with_kp, tf.int32)
-    print('2. num_classes_with_kp ', num_classes_with_kp)
+
     pred_kp_masks = K.reshape(pred_kp_masks,
                            (pred_shape[0], pred_shape[1], pred_shape[2], mask_kp_shape[3], num_classes_with_kp))
-    pred_shape = tf.shape(pred_kp_masks)
-    print('3. pred_kp_mask shape: ', pred_shape)
-    pred_shape = tf.shape(target_kp_mask)
-    print('4. mask_kp shape: ', mask_kp_shape)
+
 
     # Permute predicted masks to [batch*proposals, num_classes_with_kp, height, width, max_num_keypoints]
     pred_kp_masks = tf.transpose(pred_kp_masks, [0, 4, 1, 2, 3])
@@ -1304,11 +1301,6 @@ def mrcnn_keypoint_loss_graph(target_kp_mask, target_class_ids, pred_kp_masks):
     y_true = tf.gather(target_kp_mask, positive_ix)
     y_pred = tf.gather_nd(pred_kp_masks, indices)
 
-    # Compute binary cross entropy. If no positive ROIs, then return 0.
-    # shape: [batch, roi, num_classes]
-    # loss = K.switch(tf.size(y_true) > 0,
-    #                 K.categorical_crossentropy(target=y_true, output=y_pred, from_logits=True),
-    #                 tf.constant(0.0))
     loss = K.switch(tf.size(y_true) > 0,
                     tf.nn.softmax_cross_entropy_with_logits_v2(labels=y_true, logits=y_pred),
                     tf.constant(0.0))
