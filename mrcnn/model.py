@@ -1490,7 +1490,8 @@ def build_detection_targets(rpn_rois, gt_class_ids, gt_boxes, gt_masks, gt_kp_ma
     gt_boxes: [instance count, (y1, x1, y2, x2)]
     gt_masks: [height, width, instance count] Ground truth masks. Can be full
               size or mini-masks.
-
+    gt_kp_masks: [height, width, max keypoint count, instance count] Ground
+                 truth keypoint mask. Can be full size or mini-masks.
     Returns:
     rois: [TRAIN_ROIS_PER_IMAGE, (y1, x1, y2, x2)]
     class_ids: [TRAIN_ROIS_PER_IMAGE]. Integer class IDs.
