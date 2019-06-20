@@ -505,10 +505,45 @@ def resize_mask(mask, scale, padding, crop=None):
     # calculated with round() instead of int()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        mask = scipy.ndimage.zoom(mask, zoom=[scale, scale, 1], order=0)
+        zoom = np.ones_like(mask.shape, dtype=np.float32)
+        zoom[0] = scale
+        zoom[1] = scale
+        mask = scipy.ndimage.zoom(mask, zoom=zoom, order=0)
     if crop is not None:
         y, x, h, w = crop
-        mask = mask[y:y + h, x:x + w]
+        mask = mask[y:y + h, x:x + w, ...]
+    else:
+        mask = np.pad(mask, padding, mode='constant', constant_values=0)
+    return mask
+
+
+def resize_keypoint_mask(mask, scale, padding, crop=None):
+    """Resizes a mask using the given scale and padding.
+    Typically, you get the scale and padding from resize_image() to
+    ensure both, the image and the mask, are resized consistently.
+
+    scale: mask scaling factor
+    padding: Padding to add to the mask in the form
+            [(top, bottom), (left, right), (0, 0)]
+    """
+    # Suppress warning from scipy 0.13.0, the output shape of zoom() is
+    # calculated with round() instead of int()
+    try:
+        yscale = scale[0]
+        xscale = scale[1]
+    except TypeError:
+        yscale = scale
+        xscale = scale
+    new_y_shape = int(round(yscale * mask.shape[0]))
+    new_x_shape = int(round(xscale * mask.shape[1]))
+    y, x, kp, ins = np.where(mask)
+    y = np.round(yscale * y).astype(int)
+    x = np.round(xscale * x).astype(int)
+    mask = np.zeros((new_y_shape, new_x_shape, mask.shape[2], mask.shape[3]), dtype=mask.dtype)
+    mask[y, x, kp, ins] = True
+    if crop is not None:
+        y, x, h, w = crop
+        mask = mask[y:y + h, x:x + w, ...]
     else:
         mask = np.pad(mask, padding, mode='constant', constant_values=0)
     return mask
