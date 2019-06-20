@@ -535,6 +535,7 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, gt_kp_m
     gt_class_ids = tf.gather(gt_class_ids, non_crowd_ix)
     gt_boxes = tf.gather(gt_boxes, non_crowd_ix)
     gt_masks = tf.gather(gt_masks, non_crowd_ix, axis=2)
+    gt_kp_masks = tf.gather(gt_kp_masks, non_crowd_ix, axis=3)
 
     # Compute overlaps matrix [proposals, gt_boxes]
     overlaps = overlaps_graph(proposals, gt_boxes)
@@ -585,6 +586,10 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, gt_kp_m
     transposed_masks = tf.expand_dims(tf.transpose(gt_masks, [2, 0, 1]), -1)
     # Pick the right mask for each ROI
     roi_masks = tf.gather(transposed_masks, roi_gt_box_assignment)
+    # Permute masks to [N, height, width, MAX_NUM_KEYPOINTS]
+    transposed_kp_masks = tf.transpose(gt_kp_masks, [3, 0, 1, 2])
+    # Pick the right mask for each ROI
+    roi_kp_masks = tf.gather(transposed_kp_masks, roi_gt_box_assignment)
 
     # Compute mask targets
     boxes = positive_rois
@@ -611,6 +616,14 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, gt_kp_m
     # binary cross entropy loss.
     masks = tf.round(masks)
 
+
+    keypoint_masks = tf.image.crop_and_resize(tf.cast(roi_kp_masks, tf.float32),
+                                              boxes, box_ids,
+                                              config.KEYPOINT_MASK_SHAPE)
+    # make keypoint mask one hot.
+    keypoint_masks = tf.equal(keypoint_masks, tf.reduce_max(keypoint_masks, axis=(1, 2), keepdims=True))
+    keypoint_masks = tf.cast(keypoint_masks, tf.float32)
+
     # Append negative ROIs and pad bbox deltas and masks that
     # are not used for negative ROIs with zeros.
     rois = tf.concat([positive_rois, negative_rois], axis=0)
@@ -621,8 +634,9 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, gt_kp_m
     roi_gt_class_ids = tf.pad(roi_gt_class_ids, [(0, N + P)])
     deltas = tf.pad(deltas, [(0, N + P), (0, 0)])
     masks = tf.pad(masks, [[0, N + P], (0, 0), (0, 0)])
+    keypoint_masks = tf.pad(keypoint_masks, [[0, N + P], (0, 0), (0, 0), (0, 0)])
 
-    return rois, roi_gt_class_ids, deltas, masks
+    return rois, roi_gt_class_ids, deltas, masks, keypoint_masks
 
 
 class DetectionTargetLayer(KE.Layer):
@@ -636,6 +650,7 @@ class DetectionTargetLayer(KE.Layer):
     gt_boxes: [batch, MAX_GT_INSTANCES, (y1, x1, y2, x2)] in normalized
               coordinates.
     gt_masks: [batch, height, width, MAX_GT_INSTANCES] of boolean type
+    gt_kp_masks: [batch, height, width, MAX_NUM_KEYPOINTS, MAX_GT_INSTANCES] of boolean type
 
     Returns: Target ROIs and corresponding class IDs, bounding box shifts,
     and masks.
@@ -645,6 +660,9 @@ class DetectionTargetLayer(KE.Layer):
     target_deltas: [batch, TRAIN_ROIS_PER_IMAGE, (dy, dx, log(dh), log(dw)]
     target_mask: [batch, TRAIN_ROIS_PER_IMAGE, height, width]
                  Masks cropped to bbox boundaries and resized to neural
+                 network output size.
+    keypoint_target_mask: [batch, TRAIN_ROIS_PER_IMAGE, height, width, MAX_NUM_KEYPOINTS]
+                 Keypoint masks cropped to bbox boundaries and resized to neural
                  network output size.
 
     Note: Returned arrays might be zero padded if not enough target ROIs.
@@ -659,14 +677,15 @@ class DetectionTargetLayer(KE.Layer):
         gt_class_ids = inputs[1]
         gt_boxes = inputs[2]
         gt_masks = inputs[3]
+        gt_kp_masks = inputs[4]
 
         # Slice the batch and run a graph for each slice
         # TODO: Rename target_bbox to target_deltas for clarity
-        names = ["rois", "target_class_ids", "target_bbox", "target_mask"]
+        names = ["rois", "target_class_ids", "target_bbox", "target_mask", "target_kp_mask"]
         outputs = utils.batch_slice(
-            [proposals, gt_class_ids, gt_boxes, gt_masks],
-            lambda w, x, y, z: detection_targets_graph(
-                w, x, y, z, self.config),
+            [proposals, gt_class_ids, gt_boxes, gt_masks, gt_kp_masks],
+            lambda w, x, y, z, v: detection_targets_graph(
+                w, x, y, z, v, self.config),
             self.config.IMAGES_PER_GPU, names=names)
         return outputs
 
@@ -676,11 +695,13 @@ class DetectionTargetLayer(KE.Layer):
             (None, self.config.TRAIN_ROIS_PER_IMAGE),  # class_ids
             (None, self.config.TRAIN_ROIS_PER_IMAGE, 4),  # deltas
             (None, self.config.TRAIN_ROIS_PER_IMAGE, self.config.MASK_SHAPE[0],
-             self.config.MASK_SHAPE[1])  # masks
+             self.config.MASK_SHAPE[1]),  # masks
+            (None, self.config.TRAIN_ROIS_PER_IMAGE, self.config.KEYPOINT_MASK_SHAPE[0],
+             self.config.KEYPOINT_MASK_SHAPE[1], self.config.MAX_NUM_KEYPOINTS)  # masks
         ]
 
     def compute_mask(self, inputs, mask=None):
-        return [None, None, None, None]
+        return [None, None, None, None, None]
 
 
 ############################################################
