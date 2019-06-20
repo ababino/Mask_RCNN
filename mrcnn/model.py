@@ -1382,10 +1382,14 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
     mask: [height, width, instance_count]. The height and width are those
         of the image unless use_mini_mask is True, in which case they are
         defined in MINI_MASK_SHAPE.
+    keypoint_mask: [height, width, MAX_NUM_KEYPOINTS, instance_count]. The height and width are those
+        of the image unless use_mini_mask is True, in which case they are
+        defined in MINI_MASK_SHAPE.
     """
     # Load image and mask
     image = dataset.load_image(image_id)
-    mask, class_ids = dataset.load_mask(image_id)
+    # mask, class_ids = dataset.load_mask(image_id)
+    keypoint_mask, mask, class_ids = dataset.load_mask_and_keypoint(image_id)
     original_shape = image.shape
     image, window, scale, padding, crop = utils.resize_image(
         image,
@@ -1395,6 +1399,11 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
         mode=config.IMAGE_RESIZE_MODE)
     mask = utils.resize_mask(mask, scale, padding, crop)
 
+    # keypont mask is [height, width, keyponts, instance_count], and that is
+    # why it needs and extra padding element
+    keypoint_padding = padding + [(0, 0)]
+    keypoint_mask = utils.resize_keypoint_mask(keypoint_mask, scale, keypoint_padding, crop)
+
     # Random horizontal flips.
     # TODO: will be removed in a future update in favor of augmentation
     if augment:
@@ -1402,6 +1411,7 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
         if random.randint(0, 1):
             image = np.fliplr(image)
             mask = np.fliplr(mask)
+            keypoint_mask = np.fliplr(keypoint_mask)
 
     # Augmentation
     # This requires the imgaug lib (https://github.com/aleju/imgaug)
@@ -1422,22 +1432,28 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
         # Store shapes before augmentation to compare
         image_shape = image.shape
         mask_shape = mask.shape
+        keypoint_mask_shape = keypoint_mask.shape
         # Make augmenters deterministic to apply similarly to images and masks
         det = augmentation.to_deterministic()
         image = det.augment_image(image)
         # Change mask to np.uint8 because imgaug doesn't support np.bool
         mask = det.augment_image(mask.astype(np.uint8),
                                  hooks=imgaug.HooksImages(activator=hook))
+        keypoint_mask = det.augment_image(keypoint_mask.astype(np.uint8),
+                                          hooks=imgaug.HooksImages(activator=hook))
         # Verify that shapes didn't change
         assert image.shape == image_shape, "Augmentation shouldn't change image size"
         assert mask.shape == mask_shape, "Augmentation shouldn't change mask size"
+        assert keypoint_mask.shape == keypoint_mask_shape, "Augmentation shouldn't change keypoint_mask size"
         # Change mask back to bool
         mask = mask.astype(np.bool)
+        keypoint_mask = keypoint_mask.astype(np.bool)
 
     # Note that some boxes might be all zeros if the corresponding mask got cropped out.
     # and here is to filter them out
     _idx = np.sum(mask, axis=(0, 1)) > 0
     mask = mask[:, :, _idx]
+    keypoint_mask = keypoint_mask[:, :, :,  _idx]
     class_ids = class_ids[_idx]
     # Bounding boxes. Note that some boxes might be all zeros
     # if the corresponding mask got cropped out.
@@ -1454,15 +1470,16 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
     # Resize masks to smaller size to reduce memory usage
     if use_mini_mask:
         mask = utils.minimize_mask(bbox, mask, config.MINI_MASK_SHAPE)
+        keypoint_mask = utils.minimize_keypoint_mask(bbox, keypoint_mask, config.MINI_MASK_SHAPE)
 
     # Image meta data
     image_meta = compose_image_meta(image_id, original_shape, image.shape,
                                     window, scale, active_class_ids)
 
-    return image, image_meta, class_ids, bbox, mask
+    return image, image_meta, class_ids, bbox, mask, keypoint_mask
 
 
-def build_detection_targets(rpn_rois, gt_class_ids, gt_boxes, gt_masks, config):
+def build_detection_targets(rpn_rois, gt_class_ids, gt_boxes, gt_masks, gt_kp_masks, config):
     """Generate targets for training Stage 2 classifier and mask heads.
     This is not used in normal training. It's useful for debugging or to train
     the Mask RCNN heads without using the RPN head.
