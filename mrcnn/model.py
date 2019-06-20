@@ -1499,6 +1499,9 @@ def build_detection_targets(rpn_rois, gt_class_ids, gt_boxes, gt_masks, gt_kp_ma
             bbox refinements.
     masks: [TRAIN_ROIS_PER_IMAGE, height, width, NUM_CLASSES). Class specific masks cropped
            to bbox boundaries and resized to neural network output size.
+    keypoint_masks: [TRAIN_ROIS_PER_IMAGE, height, width, max keypoint count, NUM_CLASSES).
+                    Class specific keypoint masks cropped to bbox boundaries and
+                    resized to neural network output size.
     """
     assert rpn_rois.shape[0] > 0
     assert gt_class_ids.dtype == np.int32, "Expected int but got {}".format(
