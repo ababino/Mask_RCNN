@@ -40,7 +40,6 @@ def extract_bboxes(mask):
     boxes = np.zeros([mask.shape[-1], 4], dtype=np.int32)
     for i in range(mask.shape[-1]):
         m = mask[:, :, i]
-        is_keypoint = (m > 0).sum() == 1
         # Bounding box.
         horizontal_indicies = np.where(np.any(m, axis=0))[0]
         vertical_indicies = np.where(np.any(m, axis=1))[0]
@@ -50,12 +49,6 @@ def extract_bboxes(mask):
             # x2 and y2 should not be part of the box. Increment by 1.
             x2 += 1
             y2 += 1
-            if is_keypoint:
-                x1 -= 28
-                y1 -= 28
-                x2 += 27
-                y2 += 27
-
         else:
             # No mask for this instance. Might happen due to
             # resizing or cropping. Set bbox to zeros
