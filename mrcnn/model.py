@@ -1284,8 +1284,6 @@ def mrcnn_keypoint_loss_graph(target_kp_mask, target_class_ids, pred_kp_masks):
 
     # Permute predicted masks to [batch*proposals, num_classes_with_kp, height, width, max_num_keypoints]
     pred_kp_masks = tf.transpose(pred_kp_masks, [0, 4, 1, 2, 3])
-    # # Permute predicted masks to [batch*proposals, num_classes_with_kp*max_num_keypoints, height, width]
-    # pred_kp_masks = tf.transpose(pred_kp_masks, [0, 3, 1, 2])
 
     # Only positive ROIs contribute to the loss. And only
     # the class specific mask of each ROI.
