@@ -22,8 +22,16 @@ import keras.backend as K
 import keras.layers as KL
 import keras.engine as KE
 import keras.models as KM
-
+import sys
 from mrcnn import utils
+
+#from tensorflow.python import debug as tf_debug
+
+#sess = K.get_session()
+#sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+#sess = tf_debug.TensorBoardDebugWrapperSession(sess, "localhost:6064")
+#K.set_session(sess)
+
 
 # Requires TensorFlow 1.3+ and Keras 2.0.8+.
 from distutils.version import LooseVersion
@@ -1296,17 +1304,8 @@ def mrcnn_keypoint_loss_graph(target_kp_mask, target_class_ids, pred_kp_masks):
     indices = tf.stack([positive_ix, positive_class_ids], axis=1)
 
     # Gather the masks (predicted and true) that contribute to loss
-    y_true = tf.gather(target_kp_mask, positive_ix)
-    y_pred = tf.gather_nd(pred_kp_masks, indices)
-
-    # y_true_shape = tf.shape(y_true)
-    # y_pred_shape = tf.shape(y_pred)
-
-    # y_true = tf.transpose(y_true, [0, 3, 1, 2])
-    # y_true = K.reshape(y_true, (-1,))
-    #
-    # y_pred = tf.transpose(y_pred, [0, 3, 1, 2])
-    # y_pred = K.reshape(y_pred, (-1,))
+    y_true = tf.gather(target_kp_mask, positive_ix, name='y_true')
+    y_pred = tf.gather_nd(pred_kp_masks, indices, name='y_pred')
 
     loss = K.switch(tf.size(y_true) > 0,
                     tf.nn.softmax_cross_entropy_with_logits_v2(labels=y_true, logits=y_pred, axis=-1),
