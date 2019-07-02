@@ -1273,48 +1273,72 @@ def mrcnn_keypoint_loss_graph(target_kp_mask, target_class_ids, pred_kp_masks):
     pred_kp_masks: [batch, proposals, height, width, MAX_NUM_KEYPOINTS * NUM_CLASSES_WITH_KP]
                 float32 tensor with values from 0 to 1.
     """
+    # sanity check for kp masks.
+    target_mask_sum = K.sum(target_kp_mask, axis=(2,3))
+    target_mask_sum_max = K.max(target_mask_sum)
+    assert_op = tf.Assert(tf.less_equal(target_mask_sum_max, tf.constant(1, tf.float32)), [target_mask_sum_max], name='assert_kp_one_hot')
+    with tf.control_dependencies([assert_op]):
+        target_kp_mask = tf.identity(target_kp_mask)
     # Reshape for simplicity. Merge first two dimensions into one.
     target_class_ids = K.reshape(target_class_ids, (-1,))
-    mask_kp_shape = tf.shape(target_kp_mask)
-    pred_shape = tf.shape(pred_kp_masks)
+    mask_kp_shape = tf.shape(target_kp_mask, name='mask_kp_shape')
+    pred_shape = tf.shape(pred_kp_masks, name='pred_shape')
     # target_kp_mask: [batch * num_rois, height, width, MAX_NUM_KEYPOINTS]
     target_kp_mask = K.reshape(target_kp_mask,
-                            (-1, mask_kp_shape[2], mask_kp_shape[3], mask_kp_shape[4]))
-    mask_kp_shape = tf.shape(target_kp_mask)
+                               (-1, mask_kp_shape[2], mask_kp_shape[3], mask_kp_shape[4]))
+    mask_kp_shape = tf.shape(target_kp_mask, name='mask_kp_shape_2')
 
     # pred_kp_mask: [batch*proposals, height, width, MAX_NUM_KEYPOINTS * NUM_CLASSES_WITH_KP]
     pred_kp_masks = K.reshape(pred_kp_masks,
                            (-1, pred_shape[2], pred_shape[3], pred_shape[4]))
-    pred_shape = tf.shape(pred_kp_masks)
+    pred_shape = tf.shape(pred_kp_masks, name='pred_shape_2')
 
     # pred_kp_mask: [batch*proposals, height, width, MAX_NUM_KEYPOINTS, NUM_CLASSES_WITH_KP]
-    num_classes_with_kp = tf.divide(pred_shape[3], mask_kp_shape[3])
-    num_classes_with_kp = tf.cast(num_classes_with_kp, tf.int32)
-
+    num_classes_with_kp = tf.divide(pred_shape[3], mask_kp_shape[3], name='num_classes_with_kp')
+    num_classes_with_kp_int = tf.cast(num_classes_with_kp, tf.int32, name='num_classes_with_kp_cast')
     pred_kp_masks = K.reshape(pred_kp_masks,
-                           (pred_shape[0], pred_shape[1], pred_shape[2], mask_kp_shape[3], num_classes_with_kp))
-
+                              (pred_shape[0], pred_shape[1], pred_shape[2], mask_kp_shape[3], num_classes_with_kp_int))
 
     # Permute predicted masks to [batch*proposals, num_classes_with_kp, height, width, max_num_keypoints]
-    pred_kp_masks = tf.transpose(pred_kp_masks, [0, 4, 1, 2, 3])
+    pred_kp_masks = tf.transpose(pred_kp_masks, [0, 4, 1, 2, 3], name='pred_kp_mask_transpose')
 
     # Only positive ROIs contribute to the loss. And only
     # the class specific mask of each ROI.
     positive_ix = tf.where(target_class_ids > 0)[:, 0]
+
     positive_class_ids = tf.cast(
         tf.gather(target_class_ids, positive_ix), tf.int64)
+
     # TODO: make a class_id to class_pk_id mapping. This line only works if
     # there is only one keypoint class and it is ID=1.
     positive_class_ids = tf.subtract(positive_class_ids, tf.constant(1, dtype=tf.int64))
     indices = tf.stack([positive_ix, positive_class_ids], axis=1)
-
     # Gather the masks (predicted and true) that contribute to loss
     y_true = tf.gather(target_kp_mask, positive_ix, name='y_true')
-    y_pred = tf.gather_nd(pred_kp_masks, indices, name='y_pred')
-
-    loss = K.switch(tf.size(y_true) > 0,
-                    tf.nn.softmax_cross_entropy_with_logits_v2(labels=y_true, logits=y_pred, axis=-1),
-                    tf.constant(0.0))
+    y_pred = tf.cond(tf.size(y_true) > 0,
+                     lambda: tf.gather_nd(pred_kp_masks, indices, name='y_pred'),
+                     lambda: y_true)
+    y_pred_shape = tf.shape(y_pred, name='y_pred_shape')
+    y_true_shape = tf.shape(y_true, name='y_true_shape')
+    y_true = tf.cond(tf.size(y_true) > 0,
+                     lambda: tf.transpose(K.reshape(tf.transpose(y_true, [1, 2, 0, 3]), (-1, y_true_shape[0], y_true_shape[3])), [1, 2, 0]),
+                     lambda: y_true)
+    y_pred = tf.cond(tf.size(y_pred) > 0,
+                     lambda: tf.transpose(K.reshape(tf.transpose(y_pred, [1, 2, 0, 3]), (-1, y_pred_shape[0], y_pred_shape[3])), [1, 2, 0]),
+                     lambda: y_pred)
+    y_pred_softmax = K.switch(tf.size(y_pred)>0, tf.nn.softmax(y_pred), tf.constant(0, tf.float32))
+    y_pred_shape = tf.shape(y_pred, name='y_pred_shape_2')
+    y_true_shape = tf.shape(y_true, name='y_true_shape_2')
+    y_true_sum = K.switch(tf.size(y_true)>0, K.sum(y_true, axis=-1), tf.constant(0, tf.float32))
+    y_true_max_sum = K.max(y_true_sum)
+    y_true_ix = tf.where(y_true > 0)
+    loss = tf.cond(tf.size(y_true) > 0,
+                   lambda: tf.nn.softmax_cross_entropy_with_logits_v2(labels=y_true, logits=y_pred, axis=-1),
+                   lambda: tf.zeros((1,)))
+    loss_shape = tf.shape(loss, name='loss_shape')
+    loss_pos_ix = tf.where(loss> 0)
+    loss = tf.cond(tf.size(loss_pos_ix)>0, lambda: tf.gather_nd(loss, loss_pos_ix), lambda: loss)
+    loss_shape = tf.shape(loss)
     loss = K.mean(loss)
     return loss
 
