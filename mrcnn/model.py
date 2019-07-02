@@ -624,11 +624,16 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, gt_kp_m
     # binary cross entropy loss.
     masks = tf.round(masks)
 
-
     keypoint_masks = tf.image.crop_and_resize(tf.cast(roi_kp_masks, tf.float32),
                                               boxes, box_ids,
                                               config.KEYPOINT_MASK_SHAPE)
     # make keypoint mask one hot.
+    keypoint_masks = tf.divide(keypoint_masks, tf.reduce_max(keypoint_masks, axis=(1, 2), keepdims=True))
+    keypoint_masks = tf.equal(keypoint_masks, tf.constant(1, tf.float32))
+    keypoint_masks = tf.cast(keypoint_masks, tf.float32)
+    mask_order = tf.range(0., 1., 1./(config.KEYPOINT_MASK_SHAPE[0]*config.KEYPOINT_MASK_SHAPE[1]))
+    mask_order = tf.reshape(mask_order, (1,config.KEYPOINT_MASK_SHAPE[0],config.KEYPOINT_MASK_SHAPE[1],1))
+    keypoint_masks = tf.math.add(keypoint_masks, mask_order)
     keypoint_masks = tf.equal(keypoint_masks, tf.reduce_max(keypoint_masks, axis=(1, 2), keepdims=True))
     keypoint_masks = tf.cast(keypoint_masks, tf.float32)
 
