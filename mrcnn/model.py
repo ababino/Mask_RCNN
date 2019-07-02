@@ -2267,12 +2267,6 @@ class MaskRCNN():
                 [target_bbox, target_class_ids, mrcnn_bbox])
             mask_loss = KL.Lambda(lambda x: mrcnn_mask_loss_graph(*x), name="mrcnn_mask_loss")(
                 [target_mask, target_class_ids, mrcnn_mask])
-
-            # mask_kp_shape = tf.shape(target_kp_mask, name='kp_loss_mask_kp_shape')
-            # target_kp_mask = K.reshape(target_kp_mask,
-            #                         (-1, mask_kp_shape[2], mask_kp_shape[3], mask_kp_shape[4]))
-            # target_kp_mask = KL.Reshape(target_kp_mask,
-            #                        (-1, mask_kp_shape[2], mask_kp_shape[3], mask_kp_shape[4]))
             keypoint_loss = KL.Lambda(lambda x: mrcnn_keypoint_loss_graph(*x), name="mrcnn_keypoint_loss")(
                 [target_kp_mask, target_class_ids, mrcnn_keypoint])
 
