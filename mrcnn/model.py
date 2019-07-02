@@ -1063,69 +1063,69 @@ def build_fpn_keypoint_mask_graph(rois, feature_maps, image_meta,
     # ROI Pooling
     # Shape: [batch, num_rois, MASK_POOL_SIZE, MASK_POOL_SIZE, channels]
     x = PyramidROIAlign([pool_size, pool_size],
-                        name="roi_align_keypoint_mask")([rois, image_meta] + feature_maps)
+                        name="roi_align_keypoint")([rois, image_meta] + feature_maps)
 
     # Conv layers
     x = KL.TimeDistributed(KL.Conv2D(512, (3, 3), padding="same"),
                            name="mrcnn_keypoint_conv1")(x)
     x = KL.TimeDistributed(BatchNorm(),
-                           name='mrcnn_keypoint_mask_bn1')(x, training=train_bn)
+                           name='mrcnn_keypoint_bn1')(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.TimeDistributed(KL.Conv2D(512, (3, 3), padding="same"),
                            name="mrcnn_keypoint_conv2")(x)
     x = KL.TimeDistributed(BatchNorm(),
-                           name='mrcnn_keypoint_mask_bn2')(x, training=train_bn)
+                           name='mrcnn_keypoint_bn2')(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.TimeDistributed(KL.Conv2D(512, (3, 3), padding="same"),
                            name="mrcnn_keypoint_conv3")(x)
     x = KL.TimeDistributed(BatchNorm(),
-                           name='mrcnn_keypoint_mask_bn3')(x, training=train_bn)
+                           name='mrcnn_keypoint_bn3')(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.TimeDistributed(KL.Conv2D(512, (3, 3), padding="same"),
                            name="mrcnn_keypoint_conv4")(x)
     x = KL.TimeDistributed(BatchNorm(),
-                           name='mrcnn_keypoint_mask_bn4')(x, training=train_bn)
+                           name='mrcnn_keypoint_bn4')(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.TimeDistributed(KL.Conv2D(512, (3, 3), padding="same"),
                            name="mrcnn_keypoint_conv5")(x)
     x = KL.TimeDistributed(BatchNorm(),
-                           name='mrcnn_keypoint_mask_bn5')(x, training=train_bn)
+                           name='mrcnn_keypoint_bn5')(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.TimeDistributed(KL.Conv2D(512, (3, 3), padding="same"),
                            name="mrcnn_keypoint_conv6")(x)
     x = KL.TimeDistributed(BatchNorm(),
-                           name='mrcnn_keypoint_mask_bn6')(x, training=train_bn)
+                           name='mrcnn_keypoint_bn6')(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.TimeDistributed(KL.Conv2D(512, (3, 3), padding="same"),
                            name="mrcnn_keypoint_conv7")(x)
     x = KL.TimeDistributed(BatchNorm(),
-                           name='mrcnn_keypoint_mask_bn7')(x, training=train_bn)
+                           name='mrcnn_keypoint_bn7')(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.TimeDistributed(KL.Conv2D(512, (3, 3), padding="same"),
                            name="mrcnn_keypoint_conv8")(x)
     x = KL.TimeDistributed(BatchNorm(),
-                           name='mrcnn_keypoint_mask_bn8')(x, training=train_bn)
+                           name='mrcnn_keypoint_bn8')(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     # Deconv Layer
     x = KL.TimeDistributed(KL.Conv2DTranspose(256, (4, 4), strides=2,
                                               activation="relu"),
-                           name="mrcnn_keypoint_mask_deconv")(x)
+                           name="mrcnn_keypoint_deconv")(x)
 
     # Upscaling
     x = KL.TimeDistributed(KL.Lambda(lambda y: tf.image.resize_bilinear(y, [56, 56])),
-                           name="mrcnn_keypoint_mask_upscaling2x")(x)
+                           name="mrcnn_keypoint_upscaling2x")(x)
 
     # Final convolution without activation. Softmax is used in the loss function
     x = KL.TimeDistributed(KL.Conv2D(num_keypoints, (1, 1), strides=1),
-                           name="mrcnn_keypoint_mask")(x)
+                           name="mrcnn_keypoint")(x)
     return x
 
 
