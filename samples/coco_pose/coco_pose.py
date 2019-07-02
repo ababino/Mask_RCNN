@@ -286,6 +286,7 @@ class CocoPoseDataset(utils.Dataset):
                     y = kp[1::3]
                     v = kp[2::3]
                     for i, (x, y, v) in enumerate(zip(kp[0::3], kp[1::3], kp[2::3])):
+                        # v=0: not labeled, v=1: labeled not visible, v=2: labeled and visible.
                         if v == 2:
                             mask[y, x, i] = 1
                 # if an instance does not have annotated keypoints skip it.
