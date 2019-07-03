@@ -624,18 +624,28 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, gt_kp_m
     # binary cross entropy loss.
     masks = tf.round(masks)
 
+    # roi_kp_mask is boolean of size (N, height, width, MAX_NUM_KEYPOINTS). If
+    # the keypoint l of the ROI i is not visible or is not labeled all the
+    # values of roi_kp_mask[i, :,:, l] are equal to 0. Those ROIs and keypoints
+    # should be zero in keypoint_mask too.
+    labeled_roi_kp = tf.cast(tf.reduce_max(roi_kp_masks, axis(1, 2), keepdims=True), tf.float32)
     keypoint_masks = tf.image.crop_and_resize(tf.cast(roi_kp_masks, tf.float32),
                                               boxes, box_ids,
                                               config.KEYPOINT_MASK_SHAPE)
     # make keypoint mask one hot.
+    # normilze. masks with all zeros go to nan
     keypoint_masks = tf.divide(keypoint_masks, tf.reduce_max(keypoint_masks, axis=(1, 2), keepdims=True))
+    # binarize. mask with all zeros go to zeros
     keypoint_masks = tf.equal(keypoint_masks, tf.constant(1, tf.float32))
     keypoint_masks = tf.cast(keypoint_masks, tf.float32)
+    # make a mask_order tensor to solve ties
     mask_order = tf.range(0., 1., 1./(config.KEYPOINT_MASK_SHAPE[0]*config.KEYPOINT_MASK_SHAPE[1]))
     mask_order = tf.reshape(mask_order, (1,config.KEYPOINT_MASK_SHAPE[0],config.KEYPOINT_MASK_SHAPE[1],1))
     keypoint_masks = tf.math.add(keypoint_masks, mask_order)
     keypoint_masks = tf.equal(keypoint_masks, tf.reduce_max(keypoint_masks, axis=(1, 2), keepdims=True))
     keypoint_masks = tf.cast(keypoint_masks, tf.float32)
+    # set not labeled mask to zero
+    keypoint_masks = tf.multiply(keypoint_masks, labeled_roi_kp)
 
     # Append negative ROIs and pad bbox deltas and masks that
     # are not used for negative ROIs with zeros.
