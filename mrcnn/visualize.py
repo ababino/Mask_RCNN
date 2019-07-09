@@ -325,6 +325,22 @@ def display_top_keypoint_masks(image, mask, class_ids, class_names, limit=4):
     display_images(to_display, titles=titles, cols=limit + 1, cmap="Blues_r")
 
 
+# TODO: make this function work for more than one class with keypoints.
+def display_skeletons_from_keypoint_masks(image, kp_masks, skeleton):
+    height, width, num_keypoints, N = kp_masks.shape
+    skeletons = []
+    for i in range(N):
+        v = np.max(kp_masks[:,:,:,i], axis=(0, 1)) > 0
+        ravel_ind = np.argmax(kp_masks[:,:,:,i].reshape((height * width, num_keypoints)), axis=0)
+        y, x = np.unravel_index(ravel_ind, (height, width))
+        bones = []
+        for sk in skeleton:
+            if np.all(v[sk]>0):
+                bones.append((x[sk], y[sk]))
+        skeletons.append(bones)
+    display_skeletons(image, skeletons)
+
+
 def display_skeletons(image, skeletons):
     """Display the given image and the top few class masks."""
     colors = random_colors(len(skeletons))
