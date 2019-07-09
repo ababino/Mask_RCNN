@@ -2340,7 +2340,7 @@ class MaskRCNN():
             mrcnn_keypoint = build_fpn_keypoint_mask_graph(detection_boxes, mrcnn_feature_maps,
                                                            input_image_meta,
                                                            config.MASK_POOL_SIZE,
-                                                           config.NUM_CLASSES,
+                                                           config.MAX_NUM_KEYPOINTS * config.NUM_CLASSES_WITH_KP,
                                                            train_bn=config.TRAIN_BN)
 
             model = KM.Model([input_image, input_image_meta, input_anchors],
