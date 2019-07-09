@@ -100,7 +100,7 @@ class CocoPoseConfig(Config):
 
 class CocoPoseDataset(utils.Dataset):
     def load_coco(self, dataset_dir, subset, year=DEFAULT_DATASET_YEAR, class_ids=None,
-                  class_map=None, return_coco=False, auto_download=False):
+                  class_map=None, return_coco=False, auto_download=False, remotehost=None):
         """Load a subset of the COCO dataset.
         dataset_dir: The root directory of the COCO dataset.
         subset: What to load (train, val, minival, valminusminival)
@@ -112,10 +112,18 @@ class CocoPoseDataset(utils.Dataset):
         auto_download: Automatically download and unzip MS-COCO images and annotations
         """
 
+        self.remotehost = remotehost
+
         if auto_download is True:
             self.auto_download(dataset_dir, subset, year)
-
-        coco = COCO("{}/annotations/person_keypoints_{}{}.json".format(dataset_dir, subset, year))
+        if remotehost:
+            localfile = "person_keypoints_{}{}.json".format(subset, year)
+            remotefile = "{}/annotations/{}".format(dataset_dir, localfile)
+            os.system('scp {}:{} {}'.format(remotehost, remotefile, localfile))
+            coco = COCO(localfile)
+            os.remove(localfile)
+        else:
+            coco = COCO("{}/annotations/person_keypoints_{}{}.json".format(dataset_dir, subset, year))
         if subset == "minival" or subset == "valminusminival":
             subset = "val"
         image_dir = "{}/{}{}".format(dataset_dir, subset, year)
@@ -389,6 +397,23 @@ class CocoPoseDataset(utils.Dataset):
         m = maskUtils.decode(rle)
         return m
 
+    def load_image(self, image_id):
+        if self.remotehost:
+            remotefile = self.image_info[image_id]['path']
+            localfile = os.path.basename(remotefile)
+            os.system('scp {}:{} {}'.format(self.remotehost, remotefile, localfile))
+            # Load image
+            image = skimage.io.imread(localfile)
+            os.remove(localfile)
+            # If grayscale. Convert to RGB for consistency.
+            if image.ndim != 3:
+                image = skimage.color.gray2rgb(image)
+            # If has an alpha channel, remove it for consistency
+            if image.shape[-1] == 4:
+                image = image[..., :3]
+        else:
+            image = super(CocoPoseDataset, self).load_image(image_id)
+        return image
 
 ############################################################
 #  COCO Evaluation
