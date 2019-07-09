@@ -2711,14 +2711,15 @@ class MaskRCNN():
         windows = np.stack(windows)
         return molded_images, image_metas, windows
 
-    def unmold_detections(self, detections, mrcnn_mask, original_image_shape,
-                          image_shape, window):
+    def unmold_detections(self, detections, mrcnn_mask, mrcnn_keypoint,
+                          original_image_shape, image_shape, window):
         """Reformats the detections of one image from the format of the neural
         network output to a format suitable for use in the rest of the
         application.
 
         detections: [N, (y1, x1, y2, x2, class_id, score)] in normalized coordinates
         mrcnn_mask: [N, height, width, num_classes]
+        mrcnn_keypoint: [N, height, width, number_of_kp]
         original_image_shape: [H, W, C] Original image shape before resizing
         image_shape: [H, W, C] Shape of the image after resizing and padding
         window: [y1, x1, y2, x2] Pixel coordinates of box in the image where the real
@@ -2729,6 +2730,8 @@ class MaskRCNN():
         class_ids: [N] Integer class IDs for each bounding box
         scores: [N] Float probability scores of the class_id
         masks: [height, width, num_instances] Instance masks
+        keypoint_masks: [height, width, number_of_kp, num_instances] Instance
+                       keypont masks
         """
         # How many detections do we have?
         # Detections array is padded with zeros. Find the first class_id == 0.
@@ -2740,6 +2743,8 @@ class MaskRCNN():
         class_ids = detections[:N, 4].astype(np.int32)
         scores = detections[:N, 5]
         masks = mrcnn_mask[np.arange(N), :, :, class_ids]
+        # TODO: make this work with keypoint for more than one class
+        keypoint_masks = mrcnn_keypoint[:N, :, :, :]
 
         # Translate normalized coordinates in the resized image to pixel
         # coordinates in the original image before resizing
@@ -2763,18 +2768,24 @@ class MaskRCNN():
             class_ids = np.delete(class_ids, exclude_ix, axis=0)
             scores = np.delete(scores, exclude_ix, axis=0)
             masks = np.delete(masks, exclude_ix, axis=0)
+            keypoint_masks = np.delete(keypoint_masks, exclude_ix, axis=0)
             N = class_ids.shape[0]
 
         # Resize masks to original image size and set boundary threshold.
         full_masks = []
+        full_kp_masks = []
         for i in range(N):
             # Convert neural network mask to full size mask
             full_mask = utils.unmold_mask(masks[i], boxes[i], original_image_shape)
             full_masks.append(full_mask)
+            full_kp_mask = utils.unmold_keypoint_mask(keypoint_masks[i], boxes[i], original_image_shape)
+            full_kp_masks.append(full_kp_mask)
         full_masks = np.stack(full_masks, axis=-1)\
             if full_masks else np.empty(original_image_shape[:2] + (0,))
+        full_kp_masks = np.stack(full_kp_masks, axis=-1)\
+            if full_kp_masks else np.empty(original_image_shape[:2] + (mrcnn_keypoint.shape[3],))
 
-        return boxes, class_ids, scores, full_masks
+        return boxes, class_ids, scores, full_masks, full_kp_masks
 
     def detect(self, images, verbose=0):
         """Runs the detection pipeline.
@@ -2817,13 +2828,14 @@ class MaskRCNN():
             log("image_metas", image_metas)
             log("anchors", anchors)
         # Run object detection
-        detections, _, _, mrcnn_mask, _, _, _ =\
+        detections, _, _, mrcnn_mask, mrcnn_keypoint, _, _, _ =\
             self.keras_model.predict([molded_images, image_metas, anchors], verbose=0)
+
         # Process detections
         results = []
         for i, image in enumerate(images):
-            final_rois, final_class_ids, final_scores, final_masks =\
-                self.unmold_detections(detections[i], mrcnn_mask[i],
+            final_rois, final_class_ids, final_scores, final_masks, final_kp_masks =\
+                self.unmold_detections(detections[i], mrcnn_mask[i], mrcnn_keypoint[i],
                                        image.shape, molded_images[i].shape,
                                        windows[i])
             results.append({
@@ -2831,6 +2843,7 @@ class MaskRCNN():
                 "class_ids": final_class_ids,
                 "scores": final_scores,
                 "masks": final_masks,
+                "kp_masks": final_kp_masks,
             })
         return results
 
