@@ -629,21 +629,21 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, gt_kp_m
     # values of roi_kp_mask[i, :,:, l] are equal to 0. Those ROIs and keypoints
     # should be zero in keypoint_mask too.
     roi_kp_masks = tf.cast(roi_kp_masks, tf.float32)
-    labeled_roi_kp = tf.reduce_max(roi_kp_masks, axis=(1, 2), keepdims=True)
+    labeled_roi_kp = tf.reduce_max(roi_kp_masks, axis=(1, 2), keep_dims=True)
     keypoint_masks = tf.image.crop_and_resize(roi_kp_masks,
                                               boxes, box_ids,
                                               config.KEYPOINT_MASK_SHAPE)
     # make keypoint mask one hot.
     # normilze. masks with all zeros go to nan
-    keypoint_masks = tf.divide(keypoint_masks, tf.reduce_max(keypoint_masks, axis=(1, 2), keepdims=True))
+    keypoint_masks = tf.divide(keypoint_masks, tf.reduce_max(keypoint_masks, axis=(1, 2), keep_dims=True))
     # binarize. mask with all zeros go to zeros
     keypoint_masks = tf.equal(keypoint_masks, tf.constant(1, tf.float32))
     keypoint_masks = tf.cast(keypoint_masks, tf.float32)
     # make a mask_order tensor to solve ties
     mask_order = tf.range(0., 1., 1./(config.KEYPOINT_MASK_SHAPE[0]*config.KEYPOINT_MASK_SHAPE[1]))
     mask_order = tf.reshape(mask_order, (1,config.KEYPOINT_MASK_SHAPE[0],config.KEYPOINT_MASK_SHAPE[1],1))
-    keypoint_masks = tf.math.add(keypoint_masks, mask_order)
-    keypoint_masks = tf.equal(keypoint_masks, tf.reduce_max(keypoint_masks, axis=(1, 2), keepdims=True))
+    keypoint_masks = tf.add(keypoint_masks, mask_order)
+    keypoint_masks = tf.equal(keypoint_masks, tf.reduce_max(keypoint_masks, axis=(1, 2), keep_dims=True))
     keypoint_masks = tf.cast(keypoint_masks, tf.float32)
     # set not labeled mask to zero
     keypoint_masks = tf.multiply(keypoint_masks, labeled_roi_kp)
@@ -1344,7 +1344,7 @@ def mrcnn_keypoint_loss_graph(target_kp_mask, target_class_ids, pred_kp_masks):
     y_true_max_sum = K.max(y_true_sum)
     y_true_ix = tf.where(y_true > 0)
     loss = tf.cond(tf.size(y_true) > 0,
-                   lambda: tf.nn.softmax_cross_entropy_with_logits_v2(labels=y_true, logits=y_pred, axis=-1),
+                   lambda: tf.nn.softmax_cross_entropy_with_logits(labels=y_true, logits=y_pred),
                    lambda: tf.zeros((1,)))
     loss_shape = tf.shape(loss, name='loss_shape')
     loss_pos_ix = tf.where(loss> 0)
@@ -2467,7 +2467,7 @@ class MaskRCNN():
             if layer.output in self.keras_model.losses:
                 continue
             loss = (
-                tf.reduce_mean(layer.output, keepdims=True)
+                tf.reduce_mean(layer.output, keep_dims=True)
                 * self.config.LOSS_WEIGHTS.get(name, 1.))
             self.keras_model.add_loss(loss)
 
@@ -2491,7 +2491,7 @@ class MaskRCNN():
             layer = self.keras_model.get_layer(name)
             self.keras_model.metrics_names.append(name)
             loss = (
-                tf.reduce_mean(layer.output, keepdims=True)
+                tf.reduce_mean(layer.output, keep_dims=True)
                 * self.config.LOSS_WEIGHTS.get(name, 1.))
             self.keras_model.metrics_tensors.append(loss)
 
