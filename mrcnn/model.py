@@ -1126,7 +1126,7 @@ def build_fpn_keypoint_mask_graph(rois, feature_maps, image_meta,
     x = KL.Activation('relu')(x)
 
     # Deconv Layer
-    x = KL.TimeDistributed(KL.Conv2DTranspose(256, (4, 4), strides=2,
+    x = KL.TimeDistributed(KL.Conv2DTranspose(512, (2, 2), strides=2,
                                               activation="relu"),
                            name="mrcnn_keypoint_deconv")(x)
 
@@ -2451,7 +2451,7 @@ class MaskRCNN():
         #optimizer = keras.optimizers.SGD(
         #    lr=learning_rate, momentum=momentum,
         #    clipnorm=self.config.GRADIENT_CLIP_NORM)
-        optimizer = keras.optimizers.Adam(lr=learning_rate, 
+        optimizer = keras.optimizers.Adam(lr=learning_rate,
                                           beta_1=self.config.BETA_1,
                                           beta_2=self.config.BETA_2,
                                           clipnorm=self.config.GRADIENT_CLIP_NORM)
