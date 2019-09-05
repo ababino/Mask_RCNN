@@ -669,22 +669,25 @@ def unmold_keypoint_mask(kp_mask, bbox, image_shape):
 
     ravel_ind = np.argmax(kp_mask_bin.reshape((height * width, num_keypoints)), axis=0)
     y, x = np.unravel_index(ravel_ind, (height, width))
-    val = kp_mask[y, x, np.arange(num_keypoints)]
-    softmax_val = kp_mask_softmax[y, x, np.arange(num_keypoints)]
+    # val = kp_mask[y, x, np.arange(num_keypoints)]
+    # softmax_val = kp_mask_softmax[y, x, np.arange(num_keypoints)]
     bin_val = kp_mask_bin[y, x, np.arange(num_keypoints)]
-    pepe= np.vstack([y, x, val, softmax_val, bin_val])
-    print(pepe)
+    # pepe= np.vstack([y, x, val, softmax_val, bin_val])
+    # print(pepe)
     scale = [float(y2-y1) / kp_mask.shape[0], float(x2-x1) / kp_mask.shape[1]]
-    kp_mask.shape += (1,)
-    kp_mask = resize_keypoint_mask(kp_mask, scale, ((0, 0), (0, 0), (0, 0), (0, 0)))
-    kp_mask.shape =  kp_mask.shape[:-1]
+    unmolded_y = np.round(y1 + y * float(y2-y1) / kp_mask.shape[0]).astype(int)
+    unmolded_x = np.round(x1 + x * float(x2-x1) / kp_mask.shape[1]).astype(int)
+    #kp_mask.shape += (1,)
+    #kp_mask = resize_keypoint_mask(kp_mask, scale, ((0, 0), (0, 0), (0, 0), (0, 0)))
+    #kp_mask.shape =  kp_mask.shape[:-1]
 
     # kp_mask = resize(kp_mask, (y2 - y1, x2 - x1))
 
 
     # Put the mask in the right location.
     full_mask = np.zeros((image_shape[0], image_shape[0], kp_mask.shape[2]), dtype=np.bool)
-    full_mask[y1:y2, x1:x2, :] = kp_mask
+    #full_mask[y1:y2, x1:x2, :] = kp_mask
+    full_mask[unmolded_y, unmolded_x, np.arange(num_keypoints)] = bin_val
     return full_mask
 
 
