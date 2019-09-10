@@ -1453,7 +1453,7 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
 
     # Augmentation
     # This requires the imgaug lib (https://github.com/aleju/imgaug)
-    if augmentation:
+    if augmentation and len(class_ids) > 0:
         import imgaug
 
         # Augmenters that are safe to apply to masks
@@ -1477,8 +1477,11 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
         # Change mask to np.uint8 because imgaug doesn't support np.bool
         mask = det.augment_image(mask.astype(np.uint8),
                                  hooks=imgaug.HooksImages(activator=hook))
+        keypoint_mask_shape = keypoint_mask.shape
+        keypoint_mask = keypoint_mask.reshape((keypoint_mask_shape[0], keypoint_mask_shape[1], keypoint_mask_shape[2]*keypoint_mask_shape[3]))
         keypoint_mask = det.augment_image(keypoint_mask.astype(np.uint8),
                                           hooks=imgaug.HooksImages(activator=hook))
+        keypoint_mask = keypoint_mask.reshape(keypoint_mask_shape)
         # Verify that shapes didn't change
         assert image.shape == image_shape, "Augmentation shouldn't change image size"
         assert mask.shape == mask_shape, "Augmentation shouldn't change mask size"
