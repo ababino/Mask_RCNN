@@ -25,6 +25,13 @@ import keras.models as KM
 import sys
 from mrcnn import utils
 
+adam_accum_path = os.path.abspath('../../../AdamAccumulate/src/')
+accum_path = os.path.abspath('../../../accum_optimizer_for_keras/')
+sys.path.append(adam_accum_path)
+sys.path.append(accum_path)
+
+from adam_accumulate import AdamAccumulate
+from  accum_optimizer import AccumOptimizer
 #from tensorflow.python import debug as tf_debug
 
 #sess = K.get_session()
@@ -1126,7 +1133,7 @@ def build_fpn_keypoint_mask_graph(rois, feature_maps, image_meta,
     x = KL.Activation('relu')(x)
 
     # Deconv Layer
-    x = KL.TimeDistributed(KL.Conv2DTranspose(256, (4, 4), strides=2,
+    x = KL.TimeDistributed(KL.Conv2DTranspose(512, (2, 2), strides=2,
                                               activation="relu"),
                            name="mrcnn_keypoint_deconv")(x)
 
@@ -1134,9 +1141,11 @@ def build_fpn_keypoint_mask_graph(rois, feature_maps, image_meta,
     x = KL.TimeDistributed(KL.Lambda(lambda y: tf.image.resize_bilinear(y, [56, 56])),
                            name="mrcnn_keypoint_upscaling2x")(x)
 
+
     # Final convolution without activation. Softmax is used in the loss function
     x = KL.TimeDistributed(KL.Conv2D(num_keypoints, (1, 1), strides=1),
                            name="mrcnn_keypoint")(x)
+
     return x
 
 
@@ -2341,7 +2350,7 @@ class MaskRCNN():
             mrcnn_keypoint = build_fpn_keypoint_mask_graph(detection_boxes, mrcnn_feature_maps,
                                                            input_image_meta,
                                                            config.MASK_POOL_SIZE,
-                                                           config.MAX_NUM_KEYPOINTS * config.NUM_CLASSES_WITH_KP,
+                                                           config.NUM_CLASSES,
                                                            train_bn=config.TRAIN_BN)
 
             model = KM.Model([input_image, input_image_meta, input_anchors],
@@ -2448,13 +2457,19 @@ class MaskRCNN():
         metrics. Then calls the Keras compile() function.
         """
         # Optimizer object
-        #optimizer = keras.optimizers.SGD(
-        #    lr=learning_rate, momentum=momentum,
-        #    clipnorm=self.config.GRADIENT_CLIP_NORM)
-        optimizer = keras.optimizers.Adam(lr=learning_rate, 
-                                          beta_1=self.config.BETA_1,
-                                          beta_2=self.config.BETA_2,
-                                          clipnorm=self.config.GRADIENT_CLIP_NORM)
+        optimizer = keras.optimizers.SGD(
+            lr=learning_rate, momentum=momentum,
+            clipnorm=self.config.GRADIENT_CLIP_NORM)
+        #optimizer = keras.optimizers.Adam(lr=learning_rate, 
+        #                                  beta_1=self.config.BETA_1,
+        #                                  beta_2=self.config.BETA_2,
+        #                                  clipnorm=self.config.GRADIENT_CLIP_NORM)
+        #optimizer = AdamAccumulate(lr=learning_rate,
+        #                           beta_1=self.config.BETA_1,
+        #                           beta_2=self.config.BETA_2,
+        #                           accum_iters = self.config.ACCUM_ITERS,
+        #                           clipnorm=self.config.GRADIENT_CLIP_NORM)
+        optimizer = AccumOptimizer(optimizer, self.config.ACCUM_ITERS)
         # Add Losses
         # First, clear previously set losses to avoid duplication
         self.keras_model._losses = []
@@ -2529,8 +2544,8 @@ class MaskRCNN():
                 layer.trainable = trainable
             # Print trainable layer names
             if trainable and verbose > 0:
-                log("{}{:20}   ({})".format(" " * indent, layer.name,
-                                            layer.__class__.__name__))
+                log("{}{:20}   ({}), shape={}".format(" " * indent, layer.name,
+                                            layer.__class__.__name__, layer.output_shape))
 
     def set_log_dir(self, model_path=None):
         """Sets the model log directory and epoch counter.
@@ -2712,15 +2727,14 @@ class MaskRCNN():
         windows = np.stack(windows)
         return molded_images, image_metas, windows
 
-    def unmold_detections(self, detections, mrcnn_mask, mrcnn_keypoint,
-                          original_image_shape, image_shape, window):
+    def unmold_detections(self, detections, mrcnn_mask, original_image_shape,
+                          image_shape, window):
         """Reformats the detections of one image from the format of the neural
         network output to a format suitable for use in the rest of the
         application.
 
         detections: [N, (y1, x1, y2, x2, class_id, score)] in normalized coordinates
         mrcnn_mask: [N, height, width, num_classes]
-        mrcnn_keypoint: [N, height, width, number_of_kp]
         original_image_shape: [H, W, C] Original image shape before resizing
         image_shape: [H, W, C] Shape of the image after resizing and padding
         window: [y1, x1, y2, x2] Pixel coordinates of box in the image where the real
@@ -2731,8 +2745,6 @@ class MaskRCNN():
         class_ids: [N] Integer class IDs for each bounding box
         scores: [N] Float probability scores of the class_id
         masks: [height, width, num_instances] Instance masks
-        keypoint_masks: [height, width, number_of_kp, num_instances] Instance
-                       keypont masks
         """
         # How many detections do we have?
         # Detections array is padded with zeros. Find the first class_id == 0.
@@ -2744,8 +2756,6 @@ class MaskRCNN():
         class_ids = detections[:N, 4].astype(np.int32)
         scores = detections[:N, 5]
         masks = mrcnn_mask[np.arange(N), :, :, class_ids]
-        # TODO: make this work with keypoint for more than one class
-        keypoint_masks = mrcnn_keypoint[:N, :, :, :]
 
         # Translate normalized coordinates in the resized image to pixel
         # coordinates in the original image before resizing
@@ -2769,24 +2779,18 @@ class MaskRCNN():
             class_ids = np.delete(class_ids, exclude_ix, axis=0)
             scores = np.delete(scores, exclude_ix, axis=0)
             masks = np.delete(masks, exclude_ix, axis=0)
-            keypoint_masks = np.delete(keypoint_masks, exclude_ix, axis=0)
             N = class_ids.shape[0]
 
         # Resize masks to original image size and set boundary threshold.
         full_masks = []
-        full_kp_masks = []
         for i in range(N):
             # Convert neural network mask to full size mask
             full_mask = utils.unmold_mask(masks[i], boxes[i], original_image_shape)
             full_masks.append(full_mask)
-            full_kp_mask = utils.unmold_keypoint_mask(keypoint_masks[i], boxes[i], original_image_shape)
-            full_kp_masks.append(full_kp_mask)
         full_masks = np.stack(full_masks, axis=-1)\
             if full_masks else np.empty(original_image_shape[:2] + (0,))
-        full_kp_masks = np.stack(full_kp_masks, axis=-1)\
-            if full_kp_masks else np.empty(original_image_shape[:2] + (mrcnn_keypoint.shape[3],))
 
-        return boxes, class_ids, scores, full_masks, full_kp_masks
+        return boxes, class_ids, scores, full_masks
 
     def detect(self, images, verbose=0):
         """Runs the detection pipeline.
@@ -2829,14 +2833,13 @@ class MaskRCNN():
             log("image_metas", image_metas)
             log("anchors", anchors)
         # Run object detection
-        detections, _, _, mrcnn_mask, mrcnn_keypoint, _, _, _ =\
+        detections, _, _, mrcnn_mask, _, _, _ =\
             self.keras_model.predict([molded_images, image_metas, anchors], verbose=0)
-
         # Process detections
         results = []
         for i, image in enumerate(images):
-            final_rois, final_class_ids, final_scores, final_masks, final_kp_masks =\
-                self.unmold_detections(detections[i], mrcnn_mask[i], mrcnn_keypoint[i],
+            final_rois, final_class_ids, final_scores, final_masks =\
+                self.unmold_detections(detections[i], mrcnn_mask[i],
                                        image.shape, molded_images[i].shape,
                                        windows[i])
             results.append({
@@ -2844,7 +2847,6 @@ class MaskRCNN():
                 "class_ids": final_class_ids,
                 "scores": final_scores,
                 "masks": final_masks,
-                "kp_masks": final_kp_masks,
             })
         return results
 
