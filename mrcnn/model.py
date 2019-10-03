@@ -23,8 +23,8 @@ import keras.layers as KL
 import keras.engine as KE
 import keras.models as KM
 import sys
+import imgaug
 from mrcnn import utils
-
 #from tensorflow.python import debug as tf_debug
 
 #sess = K.get_session()
@@ -1454,7 +1454,6 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
     # Augmentation
     # This requires the imgaug lib (https://github.com/aleju/imgaug)
     if augmentation:
-        import imgaug
 
         # Augmenters that are safe to apply to masks
         # Some, such as Affine, have settings that make them unsafe, so always
