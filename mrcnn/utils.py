@@ -536,11 +536,20 @@ def resize_keypoint_mask(mask, scale, padding, crop=None):
         xscale = scale
     new_y_shape = int(round(yscale * mask.shape[0]))
     new_x_shape = int(round(xscale * mask.shape[1]))
-    y, x, kp, ins = np.where(mask)
-    y = np.round(yscale * y).astype(int)
-    x = np.round(xscale * x).astype(int)
+    y_old, x_old, kp, ins = np.where(mask)
+    y = np.floor(yscale * y_old).astype(int)
+    x = np.floor(xscale * x_old).astype(int)
+    x[x==new_x_shape] = new_x_shape - 1
+    y[y==new_y_shape] = new_y_shape - 1
     mask = np.zeros((new_y_shape, new_x_shape, mask.shape[2], mask.shape[3]), dtype=mask.dtype)
-    mask[y, x, kp, ins] = True
+    try:
+        mask[y, x, kp, ins] = True
+    except IndexError as err:
+        print(yscale, xscale, mask.shape)
+        print(yscale, xscale, y, x, mask.shape)
+        print(y, x)
+        print(y_old, x_old)
+        raise err
     if crop is not None:
         y, x, h, w = crop
         mask = mask[y:y + h, x:x + w, ...]
