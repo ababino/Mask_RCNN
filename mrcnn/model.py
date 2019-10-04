@@ -1469,7 +1469,7 @@ def load_image_gt(dataset, config, image_id, augment=False, augmentation=None,
         # Store shapes before augmentation to compare
         image_shape = image.shape
         mask_shape = mask.shape
-        keypoint_mask_shape = keypoint_mask.shape
+        #keypoint_mask_shape = keypoint_mask.shape
         # Make augmenters deterministic to apply similarly to images and masks
         det = augmentation.to_deterministic()
         image = det.augment_image(image)
