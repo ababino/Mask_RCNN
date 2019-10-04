@@ -2367,7 +2367,9 @@ class MaskRCNN():
         # Get directory names. Each directory corresponds to a model
         dir_names = next(os.walk(self.model_dir))[1]
         key = self.config.NAME.lower()
-        dir_names = filter(lambda f: f.startswith(key), dir_names)
+        pat = re.compile("^" + key + "[0-9]{8,8}T[0-9]{4,4}$")
+        # dir_names = filter(lambda f: f.startswith(key), dir_names)
+        dir_names = filter(lambda f: pat.match(f), dir_names)
         dir_names = sorted(dir_names)
         if not dir_names:
             import errno
