@@ -85,14 +85,20 @@ class CocoPoseConfig(Config):
 
     # Number of classes (including background)
     NUM_CLASSES = 1 + 1  # backgound and human
-    
+
     KEYPOINT_MASK_SHAPE = [56, 56]
-    
-    MAX_NUM_KEYPOINTS = 19
-    
+
+    MAX_NUM_KEYPOINTS = 17
+
     NUM_CLASSES_WITH_KP = 1
-    
+
     CLASSES_WITH_KP = [1]
+
+    #IMAGE_MIN_DIM = 100
+    #IMAGE_MAX_DIM = 128
+    BACKBONE = "resnet50"
+    TRAIN_ROIS_PER_IMAGE = 50
+    #TOP_DOWN_PYRAMID_SIZE = 256
 
 ############################################################
 #  Dataset
@@ -150,7 +156,7 @@ class CocoPoseDataset(utils.Dataset):
                 if 'keypoints' in coco_class_info:
                     class_info['keypoints'] = coco_class_info['keypoints']
                     class_info['skeleton'] = np.array(coco_class_info['skeleton']) - 1
-                    self.max_keypoints = max(self.max_keypoints, len(class_info['skeleton']))
+                    self.max_keypoints = max(self.max_keypoints, len(class_info['keypoints']))
 
         # Add images
         for i in image_ids:
@@ -314,10 +320,10 @@ class CocoPoseDataset(utils.Dataset):
     def load_keypoint_mask(self, image_id):
         keypoint_mask, mask, class_ids = self.load_mask_and_keypoint(image_id)
         return keypoint_mask, class_ids
-        
+
     def load_keypoint(self, image_id):
         image_info = self.image_info[image_id]
-        
+
         instance_keypoints = []
         class_ids = []
         annotations = self.image_info[image_id]["annotations"]
@@ -349,8 +355,8 @@ class CocoPoseDataset(utils.Dataset):
             # Call super class to return an empty mask
             return super(CocoDataset, self).load_mask(image_id)
 
-        
-        
+
+
     def image_reference(self, image_id):
         """Return a link to the image in the COCO Website."""
         info = self.image_info[image_id]
