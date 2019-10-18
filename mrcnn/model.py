@@ -1126,17 +1126,21 @@ def build_fpn_keypoint_mask_graph(rois, feature_maps, image_meta,
     x = KL.Activation('relu')(x)
 
     # Deconv Layer
-    x = KL.TimeDistributed(KL.Conv2DTranspose(512, (2, 2), strides=2,
+    x = KL.TimeDistributed(KL.Conv2DTranspose(num_keypoints, (4, 4), strides=2,
                                               activation="relu"),
                            name="mrcnn_keypoint_deconv")(x)
 
+    # x = KL.TimeDistributed(KL.Conv2DTranspose(512, (2, 2), strides=2,
+    #                                           activation="relu"),
+    #                        name="mrcnn_keypoint_deconv")(x)
+    #
     # Upscaling
     x = KL.TimeDistributed(KL.Lambda(lambda y: tf.image.resize_bilinear(y, [56, 56])),
                            name="mrcnn_keypoint_upscaling2x")(x)
 
-    # Final convolution without activation. Softmax is used in the loss function
-    x = KL.TimeDistributed(KL.Conv2D(num_keypoints, (1, 1), strides=1),
-                           name="mrcnn_keypoint")(x)
+    # # Final convolution without activation. Softmax is used in the loss function
+    # x = KL.TimeDistributed(KL.Conv2D(num_keypoints, (1, 1), strides=1),
+    #                        name="mrcnn_keypoint")(x)
     return x
 
 
