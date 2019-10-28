@@ -630,7 +630,7 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, gt_kp_m
     # should be zero in keypoint_mask too.
     roi_kp_masks = tf.cast(roi_kp_masks, tf.float32)
     labeled_roi_kp = tf.reduce_max(roi_kp_masks, axis=(1, 2), keep_dims=True)
-    keypoint_masks = tf.image.crop_and_resize(roi_kp_masks,
+    keypoint_masks = tf.image.crop_and_resize(roi_kp_masks*255,
                                               boxes, box_ids,
                                               config.KEYPOINT_MASK_SHAPE)
     # make keypoint mask one hot.
